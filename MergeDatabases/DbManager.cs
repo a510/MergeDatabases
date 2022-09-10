@@ -30,7 +30,8 @@ namespace MergeDatabases
             "WHSLKPWarehouseTransactionType",
             "WHSLKPWarehouseType",
             "WHUnit",
-            "SemanticSource"
+            "SemanticSource",
+            "sysdiagrams"
         };
 
         record DbTable(string Name, bool HasIdentity);
