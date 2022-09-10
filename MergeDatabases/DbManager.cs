@@ -6,6 +6,20 @@ namespace MergeDatabases
     internal class DbManager : IDisposable
     {
         private readonly SqlConnection sqlConnection;
+        private readonly string[] excludedTables = new string[]
+        {
+            "__EFMigrationsHistory",
+            "Organization",
+            "BillingBeneficiaryType",
+            "BillingContractCategoryType",
+            "BloodGroup",
+            "DefaultDentalChart",
+            "DentalChartReference",
+            "DentalShadeGuide",
+            "DrugDosageForm",
+            "Gender",
+            "Governorate",
+        };
 
         record DbTable(string Name, bool HasIdentity);
         record DbColumn(string Schema, string Table, string name, bool IsIdentity, string? DataType, bool IsPrimaryKey)
@@ -66,7 +80,7 @@ namespace MergeDatabases
             foreach (var table in tablesToCopy)
             {
                 // todo: read excluded tables dynamically
-                if (table.Name == "__EFMigrationsHistory") continue;
+                if (excludedTables.Contains(table.Name)) continue;
                 if (table.HasIdentity) destinationDbManager.SetIdentityInsert(table.Name, true);
 
                 var columns = GetTableColumns(table.Name);
