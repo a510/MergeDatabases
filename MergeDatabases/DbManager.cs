@@ -44,7 +44,9 @@ namespace MergeDatabases
             "CanvasView",
             "AspNetRoles",
             "AssignmentController",
-            "CashTransfer"
+            "CashTransfer",
+            "StatusList",
+            "StatusListCategory"
         };
 
         record DbTable(string Name, bool HasIdentity);
