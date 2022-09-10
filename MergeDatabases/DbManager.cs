@@ -46,7 +46,10 @@ namespace MergeDatabases
             "AssignmentController",
             "CashTransfer",
             "StatusList",
-            "StatusListCategory"
+            "StatusListCategory",
+            "ServiceGroupType",
+            "Surgery",
+            "Symptom"
         };
 
         record DbTable(string Name, bool HasIdentity);
