@@ -72,7 +72,6 @@ namespace MergeDatabases
             sqlConnection.Dispose();
         }
 
-
         internal void UpdateOrganizationId(int organizationId)
         {
             var columns = GetColumnsByName("OrganizationId");
@@ -202,20 +201,20 @@ namespace MergeDatabases
         private SqlCommand GetCommand() => new() { Connection = sqlConnection };
         private int ExecuteNonQuery(string str)
         {
-            try
-            {
+            //try
+            //{
                 var command = GetCommand();
                 command.CommandText = str;
                 return command.ExecuteNonQuery();
-            }
-            catch (Exception ex)
-            {
-                if (!ex.Message.StartsWith("Violation of PRIMARY KEY constraint"))
-                {
+            //}
+            //catch (Exception ex)
+            //{
+            //    if (!ex.Message.StartsWith("Violation of PRIMARY KEY constraint"))
+            //    {
 
-                }
-                return 0;
-            }
+            //    }
+            //    return 0;
+            //}
         }
 
         private void DisableTriggers()

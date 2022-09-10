@@ -2,8 +2,8 @@
 {
     public class Program
     {
-        private const string sourceDbConnectionString = @"Server=.\sqlexpress;Database=RsClinic;User Id=sa;Password=q";
-        private const string destinationDbConnectionString = @"Server=.\sqlexpress;Database=DoctorSquareTarget;User Id=sa;Password=q";
+        private const string sourceDbConnectionString = @"Server=.\sqlexpress;Database=src;User Id=sa;Password=q";
+        private const string destinationDbConnectionString = @"Server=.\sqlexpress;Database=dst;User Id=sa;Password=q";
         private static readonly Organization sourceOrganization = new (2, "engOrg", "arOrg", 2);
 
         public static void Main()
@@ -26,6 +26,7 @@
             sourceDbManager.IncrementIdentityColumns(maxId);
 
             sourceDbManager.CopyDataTo(destinationDbManager);
+            Console.WriteLine("Migration done");
         }
     }
 }
