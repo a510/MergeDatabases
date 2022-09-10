@@ -39,6 +39,7 @@ namespace MergeDatabases
         {
             public string Name { get; set; } = name;
         }
+
         record ColumnReference(string PkSchema, string PkTable, string PkColumn, string FkSchema, string FkTable, string FkColumn, string ReferenceName)
         {
             public bool IsSelfReference => PkTable == FkTable;
@@ -88,7 +89,7 @@ namespace MergeDatabases
             var tablesToCopy = destinationDbManager.GetAllTables();
             var fkRefs = destinationDbManager.GetForeignKeyReferences(null, true);
             destinationDbManager.DisableAllForeignKeys(fkRefs);
-            destinationDbManager.DisableDatabaseTriggers();
+            destinationDbManager.DisableTriggers();
 
             foreach (var table in tablesToCopy)
             {
@@ -111,7 +112,7 @@ namespace MergeDatabases
                 if (table.HasIdentity) destinationDbManager.SetIdentityInsert(table.Name, false);
             }
             destinationDbManager.EnableAllForeignKeys(fkRefs);
-            destinationDbManager.EnableDatabaseTriggers();
+            destinationDbManager.EnableTriggers();
         }
         internal long GetMaxIdentity()
         {
@@ -134,7 +135,6 @@ namespace MergeDatabases
 
             return maxId;
         }
-
 
         private DbColumn[] GetIdentityColumns()
         {
@@ -193,7 +193,59 @@ namespace MergeDatabases
             command.CommandText = str;
             return command.ExecuteNonQuery();
         }
-        private int DisableDatabaseTriggers() => ExecuteNonQuery("DISABLE TRIGGER ALL On DATABASE;");
+
+        private void DisableTriggers()
+        {
+            DisableDatabaseTriggers();
+            DisableTablesTriggers();
+        }
+
+        private void EnableTriggers()
+        {
+            EnableDatabaseTriggers();
+            EnableTablesTriggers();
+        }
+
+        private void DisableDatabaseTriggers() => ExecuteNonQuery("DISABLE TRIGGER ALL On DATABASE;");
+
+        private void DisableTablesTriggers()
+        {
+            var tables = GetTriggerTables();
+            foreach (var table in tables)
+            {
+                ExecuteNonQuery($"Disable Trigger All on {table.Name}");
+            }
+        }
+        private void EnableTablesTriggers()
+        {
+            var tables = GetTriggerTables();
+            foreach (var table in tables)
+            {
+                ExecuteNonQuery($"Enable Trigger All on {table.Name}");
+            }
+        }
+        private DbTable[] GetTriggerTables()
+        {
+            var tables = new List<DbTable>();
+            var command = GetCommand();
+            command.CommandText = $"SELECT distinct SCHEMA_NAME(t2.[schema_id]) tschema , t2.[name] tablename FROM sys.triggers t1 INNER JOIN sys.tables t2 ON t2.object_id = t1.parent_id WHERE t1.is_ms_shipped = 0 AND t1.parent_class = 1";
+
+            var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                var schema = reader["tschema"].ToString();
+                var tableName = reader["tablename"].ToString();
+                tables.Add(new DbTable
+                (
+                    Name: tableName,
+                    HasIdentity: default
+                ));
+            }
+            reader.Close();
+
+            return tables.ToArray();
+        }
+
         private int EnableDatabaseTriggers() => ExecuteNonQuery("ENABLE TRIGGER ALL On DATABASE;");
         private int SetIdentityInsert(string table, bool enable) => ExecuteNonQuery($@"SET IDENTITY_INSERT dbo.{table} " + (enable ? "ON" : "OFF"));
         private void SetPrimaryKey(DbColumn column) => ExecuteNonQuery(@$"ALTER TABLE {column.Schema}.{column.Table} ADD CONSTRAINT PK_{column.Table} PRIMARY KEY CLUSTERED ({column.Name});");
@@ -246,7 +298,7 @@ namespace MergeDatabases
         private string[] GetTableColumns(string table)
         {
             var command = GetCommand();
-            command.CommandText = $@"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE DATA_TYPE not in ('timestamp') and TABLE_NAME = '{table}'";
+            command.CommandText = $@"SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE DATA_TYPE not in ('timestamp') and COLUMNPROPERTY(OBJECT_ID('dbo.'  + TABLE_NAME), COLUMN_NAME, 'IsComputed') = 0 and TABLE_NAME = '{table}'";
             var columns = new List<string>();
             var reader = command.ExecuteReader();
             while (reader.Read())
@@ -404,5 +456,20 @@ WHERE   C.CONSTRAINT_TYPE = 'PRIMARY KEY'
             CopyDataFromColumnToColumn(column, newColumn);
             return newColumn;
         }
+
+        internal void AddOrganizationIfNotExist(Organization organization)
+        {
+            var command = GetCommand();
+            command.CommandText = $"SELECT Id FROM dbo.Organization where Id = {organization.Id}";
+            var value = command.ExecuteScalar();
+            if (long.TryParse(value?.ToString(), out var intValue) && intValue == organization.Id)
+            {
+                return;
+            }
+            SetIdentityInsert("Organization", true);
+            ExecuteNonQuery($"insert into organization (id, engName, locName, isactive, lastStatusId) values ({organization.Id}, '{organization.EngName}', '{organization.LocName}', 1, {organization.LastStatusId})");
+            SetIdentityInsert("Organization", false);
+        }
     }
+    record Organization(int Id, string EngName, string LocName, int LastStatusId);
 }

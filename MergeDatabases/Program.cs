@@ -2,9 +2,9 @@
 {
     public class Program
     {
-        private const string sourceDbConnectionString = @"Server=.\sqlexpress;Database=source;User Id=sa;Password=q";
-        private const string destinationDbConnectionString = @"Server=.\sqlexpress;Database=dest;User Id=sa;Password=q";
-        private const int sourceOrganizationId = 1;
+        private const string sourceDbConnectionString = @"Server=.\sqlexpress;Database=RsClinic;User Id=sa;Password=q";
+        private const string destinationDbConnectionString = @"Server=.\sqlexpress;Database=DoctorSquareTarget;User Id=sa;Password=q";
+        private static readonly Organization sourceOrganization = new (2, "engOrg", "arOrg", 2);
 
         public static void Main()
         {
@@ -14,7 +14,10 @@
             sourceDbManager.OpenConnection();
             destinationDbManager.OpenConnection();
 
-            sourceDbManager.UpdateOrganizationId(sourceOrganizationId);
+            sourceDbManager.AddOrganizationIfNotExist(sourceOrganization);
+            destinationDbManager.AddOrganizationIfNotExist(sourceOrganization);
+
+            sourceDbManager.UpdateOrganizationId(sourceOrganization.Id);
 
             var sourceMaxId = sourceDbManager.GetMaxIdentity();
             var destinationMaxId = destinationDbManager.GetMaxIdentity();
