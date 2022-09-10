@@ -19,6 +19,17 @@ namespace MergeDatabases
             "DrugDosageForm",
             "Gender",
             "Governorate",
+            "PaymentType",
+            "PaymentMethod",
+            "PartnerType",
+            "MedicationTiming",
+            "ReferrableType",
+            "TimeUnit",
+            "VitalSign",
+            "WHSLKPServiceClassification",
+            "WHSLKPWarehouseTransactionType",
+            "WHSLKPWarehouseType",
+            "WHUnit"
         };
 
         record DbTable(string Name, bool HasIdentity);
