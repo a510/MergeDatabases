@@ -31,7 +31,20 @@ namespace MergeDatabases
             "WHSLKPWarehouseType",
             "WHUnit",
             "SemanticSource",
-            "sysdiagrams"
+            "sysdiagrams",
+            "PhysicianDocumentType",
+            "RADInvestigation",
+            "MenuItem",
+            "Occupation",
+            "Medication",
+            "LABInvestigation",
+            "Finding",
+            "Diagnose",
+            "BookableType",
+            "CanvasView",
+            "AspNetRoles",
+            "AssignmentController",
+            "CashTransfer"
         };
 
         record DbTable(string Name, bool HasIdentity);
@@ -189,9 +202,20 @@ namespace MergeDatabases
         private SqlCommand GetCommand() => new() { Connection = sqlConnection };
         private int ExecuteNonQuery(string str)
         {
-            var command = GetCommand();
-            command.CommandText = str;
-            return command.ExecuteNonQuery();
+            try
+            {
+                var command = GetCommand();
+                command.CommandText = str;
+                return command.ExecuteNonQuery();
+            }
+            catch (Exception ex)
+            {
+                if (!ex.Message.StartsWith("Violation of PRIMARY KEY constraint"))
+                {
+
+                }
+                return 0;
+            }
         }
 
         private void DisableTriggers()
