@@ -344,8 +344,15 @@ namespace MergeDatabases
             var command = GetCommand();
             foreach (var foreignKey in fkRefs)
             {
-                command.CommandText = $@"ALTER TABLE {foreignKey.FkSchema}.{foreignKey.FkTable} WITH CHECK CHECK CONSTRAINT {foreignKey.ReferenceName};";
-                command.ExecuteNonQuery();
+                try
+                {
+                    command.CommandText = $@"ALTER TABLE {foreignKey.FkSchema}.{foreignKey.FkTable} WITH CHECK CHECK CONSTRAINT {foreignKey.ReferenceName};";
+                    command.ExecuteNonQuery();
+                }
+                catch (Exception ex)
+                {
+                    File.AppendAllText("foreignKeyExceptions.txt", ex.ToString() + "\r\n\r\n\r\n\r\n\r\n");
+                }
             }
         }
         private void DisableAllForeignKeys(ColumnReference[] fkRefs)
