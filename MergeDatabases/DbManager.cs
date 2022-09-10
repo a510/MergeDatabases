@@ -188,17 +188,20 @@ namespace MergeDatabases
             //if (isPrimary) SetPrimaryKey(newColumn);
             //CreateReferences(references, true);
             IncrementColumnValues(newColumn, maxId);
-            foreach (var reference in references)
+            if (!excludedTables.Contains(identityColumn.Table))
             {
-                IncrementColumnValues(new DbColumn
-                (
-                    name: reference.FkColumn,
-                    Table: reference.FkTable,
-                    Schema: reference.FkSchema,
-                    IsIdentity: false,
-                    DataType: null,
-                    IsPrimaryKey: false
-                ), maxId);
+                foreach (var reference in references)
+                {
+                    IncrementColumnValues(new DbColumn
+                    (
+                        name: reference.FkColumn,
+                        Table: reference.FkTable,
+                        Schema: reference.FkSchema,
+                        IsIdentity: false,
+                        DataType: null,
+                        IsPrimaryKey: false
+                    ), maxId);
+                }
             }
             //DropForeignKeyReferences(references);
             //CreateReferences(references, false);
@@ -341,7 +344,7 @@ namespace MergeDatabases
             var command = GetCommand();
             foreach (var foreignKey in fkRefs)
             {
-                command.CommandText = $@"ALTER TABLE {foreignKey.FkSchema}.{foreignKey.FkTable} CHECK CONSTRAINT {foreignKey.ReferenceName};";
+                command.CommandText = $@"ALTER TABLE {foreignKey.FkSchema}.{foreignKey.FkTable} WITH CHECK CHECK CONSTRAINT {foreignKey.ReferenceName};";
                 command.ExecuteNonQuery();
             }
         }
