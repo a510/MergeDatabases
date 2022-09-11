@@ -6,6 +6,12 @@ namespace MergeDatabases
     internal class DbManager : IDisposable
     {
         private readonly SqlConnection sqlConnection;
+        private readonly Dictionary<string, string> unionTables = new()
+        {
+           { "LABInvestigation",    "InvestigationGuid" },
+           { "Medication",          "MedicationGuid" },
+           { "RADInvestigation",    "InvestigationGuid" },
+        };
         private readonly string[] excludedTables = new string[]
         {
             "__EFMigrationsHistory",
@@ -49,8 +55,13 @@ namespace MergeDatabases
             "StatusListCategory",
             "ServiceGroupType",
             "Surgery",
-            "Symptom"
+            "Symptom",
+            "SymptomDetail",
+            "QuickLink",
+            "PriceListCategoryBeneficiary"
         };
+
+        public string DatabaseName => this.sqlConnection.Database;
 
         record DbTable(string Name, bool HasIdentity);
         record DbColumn(string Schema, string Table, string name, bool IsIdentity, string? DataType, bool IsPrimaryKey)
@@ -118,8 +129,18 @@ namespace MergeDatabases
 
                 try
                 {
-                    var rows = destinationDbManager.ExecuteNonQuery($"insert into {table.Name} ({string.Join(",", columns)}) SELECT {string.Join(",", columns)} FROM {this.sqlConnection.Database}.dbo.{table.Name}");
-                    Console.WriteLine($"Copied {rows} rows to table {table.Name}");
+                    if (unionTables.ContainsKey(table.Name))
+                    {
+                        var rows = destinationDbManager.ExecuteNonQuery($"insert into {table.Name} ({string.Join(",", columns)}) " +
+                            $"(SELECT {string.Join(",", columns)} FROM {this.DatabaseName}.dbo.{table.Name} " +
+                            $"where {unionTables[table.Name]} not in (select {unionTables[table.Name]} from {destinationDbManager.DatabaseName}.dbo.{table.Name}))");
+                        Console.WriteLine($"Copied {rows} NEW rows to table {table.Name}");
+                    }
+                    else
+                    {
+                        var rows = destinationDbManager.ExecuteNonQuery($"insert into {table.Name} ({string.Join(",", columns)}) SELECT {string.Join(",", columns)} FROM {this.sqlConnection.Database}.dbo.{table.Name}");
+                        Console.WriteLine($"Copied {rows} rows to table {table.Name}");
+                    }
                 }
                 catch (Exception ex) when (ex.GetBaseException() is SqlException sqlEx && sqlEx.Number == 2627)
                 {
@@ -178,6 +199,10 @@ namespace MergeDatabases
         }
         private void IncrementIdentityValues(DbColumn identityColumn, long maxId)
         {
+            if (excludedTables.Contains(identityColumn.Table))
+            {
+                return;
+            }
             var newColumn = CopyColumnToNewOne("TempMigrationKey", identityColumn);
             var references = GetForeignKeyReferences(identityColumn, false);
             DropForeignKeyReferences(references);
@@ -188,21 +213,20 @@ namespace MergeDatabases
             //if (isPrimary) SetPrimaryKey(newColumn);
             //CreateReferences(references, true);
             IncrementColumnValues(newColumn, maxId);
-            if (!excludedTables.Contains(identityColumn.Table))
+
+            foreach (var reference in references)
             {
-                foreach (var reference in references)
-                {
-                    IncrementColumnValues(new DbColumn
-                    (
-                        name: reference.FkColumn,
-                        Table: reference.FkTable,
-                        Schema: reference.FkSchema,
-                        IsIdentity: false,
-                        DataType: null,
-                        IsPrimaryKey: false
-                    ), maxId);
-                }
+                IncrementColumnValues(new DbColumn
+                (
+                    name: reference.FkColumn,
+                    Table: reference.FkTable,
+                    Schema: reference.FkSchema,
+                    IsIdentity: false,
+                    DataType: null,
+                    IsPrimaryKey: false
+                ), maxId);
             }
+
             //DropForeignKeyReferences(references);
             //CreateReferences(references, false);
         }
@@ -211,9 +235,9 @@ namespace MergeDatabases
         {
             //try
             //{
-                var command = GetCommand();
-                command.CommandText = str;
-                return command.ExecuteNonQuery();
+            var command = GetCommand();
+            command.CommandText = str;
+            return command.ExecuteNonQuery();
             //}
             //catch (Exception ex)
             //{
