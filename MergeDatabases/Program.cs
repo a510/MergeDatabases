@@ -4,6 +4,7 @@
     {
         private const string sourceDbConnectionString = @"Server=.\sqlexpress;Database=src;User Id=sa;Password=q";
         private const string destinationDbConnectionString = @"Server=.\sqlexpress;Database=dst;User Id=sa;Password=q";
+        private const string backupDirectory = @"d:\";
         private static readonly Organization sourceOrganization = new (2, "engOrg", "arOrg", 2);
 
         public static void Main()
@@ -13,6 +14,9 @@
 
             sourceDbManager.OpenConnection();
             destinationDbManager.OpenConnection();
+
+            //sourceDbManager.BackupDatabase(backupDirectory);
+            //destinationDbManager.BackupDatabase(backupDirectory);
 
             sourceDbManager.AddOrganizationIfNotExist(sourceOrganization);
             destinationDbManager.AddOrganizationIfNotExist(sourceOrganization);

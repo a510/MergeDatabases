@@ -8,9 +8,10 @@ namespace MergeDatabases
         private readonly SqlConnection sqlConnection;
         private readonly Dictionary<string, string> unionTables = new()
         {
-           { "LABInvestigation",    "InvestigationGuid" },
-           { "Medication",          "MedicationGuid" },
-           { "RADInvestigation",    "InvestigationGuid" },
+           { "labinvestigation",    "InvestigationGuid" },
+           { "medication",          "MedicationGuid" },
+           { "symptom",          "symtomGuid" },
+           { "radinvestigation",    "InvestigationGuid" },
         };
         private readonly string[] excludedTables = new string[]
         {
@@ -39,11 +40,11 @@ namespace MergeDatabases
             "SemanticSource",
             "sysdiagrams",
             "PhysicianDocumentType",
-            "RADInvestigation",
+            //"RADInvestigation",
             "MenuItem",
             "Occupation",
-            "Medication",
-            "LABInvestigation",
+            //"Medication",
+            //"LABInvestigation",
             "Finding",
             "Diagnose",
             "BookableType",
@@ -55,7 +56,7 @@ namespace MergeDatabases
             "StatusListCategory",
             "ServiceGroupType",
             "Surgery",
-            "Symptom",
+            //"Symptom",
             "SymptomDetail",
             "QuickLink",
             "PriceListCategoryBeneficiary"
@@ -88,6 +89,18 @@ namespace MergeDatabases
             sqlConnection.Dispose();
         }
 
+        internal void BackupDatabase(string backupDirectory)
+        {
+            Directory.CreateDirectory(backupDirectory);
+            ExecuteNonQuery($"USE master BACKUP DATABASE [{this.DatabaseName}] TO DISK='{Path.Combine(backupDirectory, $"{this.DatabaseName}-{DateTime.Now:yyyy-MM-dd HH.mm.ss}.bak")}'");
+        }
+
+        internal void RestoreDatabase(string backupDirectory)
+        {
+            Directory.CreateDirectory(backupDirectory);
+            var files = Directory.GetFiles(backupDirectory, "*.bak");
+            ExecuteNonQuery($"USE master RESTORE DATABASE [{this.DatabaseName}] TO DISK='{Path.Combine(backupDirectory, $"{this.DatabaseName}-{DateTime.Now:yyyy-MM-dd HH.mm.ss}.bak")}'");
+        }
         internal void UpdateOrganizationId(int organizationId)
         {
             var columns = GetColumnsByName("OrganizationId");
@@ -129,7 +142,7 @@ namespace MergeDatabases
 
                 try
                 {
-                    if (unionTables.ContainsKey(table.Name))
+                    if (unionTables.ContainsKey(table.Name.ToLowerInvariant()))
                     {
                         var rows = destinationDbManager.ExecuteNonQuery($"insert into {table.Name} ({string.Join(",", columns)}) " +
                             $"(SELECT {string.Join(",", columns)} FROM {this.DatabaseName}.dbo.{table.Name} " +
