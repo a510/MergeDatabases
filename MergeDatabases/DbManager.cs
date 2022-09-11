@@ -142,11 +142,12 @@ namespace MergeDatabases
 
                 try
                 {
-                    if (unionTables.ContainsKey(table.Name.ToLowerInvariant()))
+                    var tableLowerName = table.Name.ToLowerInvariant();
+                    if (unionTables.ContainsKey(tableLowerName))
                     {
                         var rows = destinationDbManager.ExecuteNonQuery($"insert into {table.Name} ({string.Join(",", columns)}) " +
                             $"(SELECT {string.Join(",", columns)} FROM {this.DatabaseName}.dbo.{table.Name} " +
-                            $"where {unionTables[table.Name]} not in (select {unionTables[table.Name]} from {destinationDbManager.DatabaseName}.dbo.{table.Name}))");
+                            $"where {unionTables[tableLowerName]} not in (select {unionTables[tableLowerName]} from {destinationDbManager.DatabaseName}.dbo.{table.Name}))");
                         Console.WriteLine($"Copied {rows} NEW rows to table {table.Name}");
                     }
                     else
