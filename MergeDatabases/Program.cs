@@ -18,16 +18,18 @@
             //sourceDbManager.BackupDatabase(backupDirectory);
             //destinationDbManager.BackupDatabase(backupDirectory);
 
+            //sourceDbManager.RestoreDatabase(backupDirectory);
+            //destinationDbManager.RestoreDatabase(backupDirectory);
+
             sourceDbManager.AddOrganizationIfNotExist(sourceOrganization);
             destinationDbManager.AddOrganizationIfNotExist(sourceOrganization);
 
             sourceDbManager.UpdateOrganizationId(sourceOrganization.Id);
 
-            var sourceMaxId = sourceDbManager.GetMaxIdentity();
-            var destinationMaxId = destinationDbManager.GetMaxIdentity();
-            var maxId = Math.Max(sourceMaxId, destinationMaxId);
+            var destinationIdentityColumns = destinationDbManager.GetIdentityColumns();
+            var maxIds = destinationIdentityColumns.ToDictionary(a => $"{a.Schema}.{a.Table}.{a.Name}", a => a.LastValue);
 
-            sourceDbManager.IncrementIdentityColumns(maxId);
+            sourceDbManager.IncrementIdentityColumns(maxIds);
 
             sourceDbManager.CopyDataTo(destinationDbManager);
             Console.WriteLine("Migration done");

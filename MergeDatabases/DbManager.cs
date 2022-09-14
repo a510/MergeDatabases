@@ -90,17 +90,26 @@ namespace MergeDatabases
         }
 
         internal void BackupDatabase(string backupDirectory)
-        {
+        {     
+            var database = DatabaseName;
             Directory.CreateDirectory(backupDirectory);
             ExecuteNonQuery($"USE master BACKUP DATABASE [{this.DatabaseName}] TO DISK='{Path.Combine(backupDirectory, $"{this.DatabaseName}-{DateTime.Now:yyyy-MM-dd HH.mm.ss}.bak")}'");
+            ExecuteNonQuery($"USE {database}");
         }
 
         internal void RestoreDatabase(string backupDirectory)
         {
+            var database = DatabaseName;
             Directory.CreateDirectory(backupDirectory);
-            var files = Directory.GetFiles(backupDirectory, "*.bak");
-            ExecuteNonQuery($"USE master RESTORE DATABASE [{this.DatabaseName}] TO DISK='{Path.Combine(backupDirectory, $"{this.DatabaseName}-{DateTime.Now:yyyy-MM-dd HH.mm.ss}.bak")}'");
+            var backupFile = Directory.GetFiles(backupDirectory, "*.bak").Where(a => Path.GetFileNameWithoutExtension(a).StartsWith(this.DatabaseName)).OrderByDescending(a => new FileInfo(a).CreationTime).FirstOrDefault();
+            if (backupFile == null)
+            {
+                throw new Exception("Could not find backup file in the specified directory");
+            }
+            ExecuteNonQuery($"USE master RESTORE DATABASE [{this.DatabaseName}] FROM DISK='{backupFile}' WITH REPLACE");
+            ExecuteNonQuery($"USE {database}");
         }
+
         internal void UpdateOrganizationId(int organizationId)
         {
             var columns = GetColumnsByName("OrganizationId");
@@ -115,12 +124,23 @@ namespace MergeDatabases
 
             Console.WriteLine("Done setting organizationIds");
         }
-        internal void IncrementIdentityColumns(long maxId)
+
+        internal void IncrementIdentityColumns(Dictionary<string, long> maxValues)
         {
             var identityColumns = GetIdentityColumns();
 
             foreach (var identityColumn in identityColumns)
             {
+                if (excludedTables.Contains(identityColumn.Table))
+                {
+                    continue;
+                }
+                var fullColumnName = $"{identityColumn.Schema}.{identityColumn.Table}.{identityColumn.Name}";
+                var maxId = maxValues[fullColumnName];
+                if (maxId == 0)
+                {
+                    continue;
+                }
                 IncrementIdentityValues(identityColumn, maxId);
                 Console.WriteLine($"incrementing identity column in table {identityColumn.Table}");
             }
@@ -166,67 +186,41 @@ namespace MergeDatabases
             destinationDbManager.EnableAllForeignKeys(fkRefs);
             destinationDbManager.EnableTriggers();
         }
-        internal long GetMaxIdentity()
+
+        public IdentityColumn[] GetIdentityColumns()
         {
-            // todo: select max(LAST_VALUE) from sys.identity_columns            
-            var columns = GetIdentityColumns();
-            var maxId = 0L;
+            var columns = new List<IdentityColumn>();
 
             var command = GetCommand();
-
-            foreach (var column in columns)
-            {
-                command.CommandText = $"SELECT MAX({column.Name}) FROM {column.Schema}.{column.Table}";
-
-                var value = command.ExecuteScalar();
-                if (long.TryParse(value.ToString(), out var intValue))
-                {
-                    maxId = Math.Max(maxId, intValue);
-                }
-            }
-
-            return maxId;
-        }
-
-        private DbColumn[] GetIdentityColumns()
-        {
-            var columns = new List<DbColumn>();
-
-            var command = GetCommand();
-            command.CommandText = $"select ty.name DataType, s.name TableSchema, t.name TableName, c.name ColumnName FROM sys.columns C INNER JOIN sys.tables T ON C.object_id = T.object_id INNER JOIN sys.schemas s ON S.schema_id = T.schema_id INNER JOIN sys.types ty ON ty.user_type_id = c.user_type_id WHERE is_identity = 1 and s.name = 'dbo' order by TableSchema,TableName, ColumnName;";
+            command.CommandText = $"select ty.name DataType, s.name TableSchema, t.name TableName, c.name ColumnName, IsNull(c.last_value, 0) LastValue FROM sys.identity_columns C INNER JOIN sys.tables T ON C.object_id = T.object_id INNER JOIN sys.schemas s ON S.schema_id = T.schema_id INNER JOIN sys.types ty ON ty.user_type_id = c.user_type_id WHERE is_identity = 1 and s.name = 'dbo' order by TableSchema,TableName, ColumnName;";
 
             var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                columns.Add(new DbColumn
+                columns.Add(new IdentityColumn
                 (
                     Schema: reader["TableSchema"].ToString(),
                     Table: reader["TableName"].ToString(),
-                    name: reader["ColumnName"].ToString(),
+                    Name: reader["ColumnName"].ToString(),
                     DataType: reader["DataType"].ToString(),
-                    IsIdentity: true,
-                    IsPrimaryKey: false
+                    LastValue: Convert.ToInt64(reader["LastValue"])
                 ));
             }
             reader.Close();
             return columns.ToArray();
         }
-        private void IncrementIdentityValues(DbColumn identityColumn, long maxId)
+        private void IncrementIdentityValues(IdentityColumn identityColumn, long increment)
         {
-            if (excludedTables.Contains(identityColumn.Table))
-            {
-                return;
-            }
-            var newColumn = CopyColumnToNewOne("TempMigrationKey", identityColumn);
-            var references = GetForeignKeyReferences(identityColumn, false);
+            var dbColumn = new DbColumn(identityColumn.Schema, identityColumn.Table, identityColumn.Name, true, identityColumn.DataType, IsPrimaryKey(identityColumn.Schema, identityColumn.Table, identityColumn.Name));
+            var newColumn = CopyColumnToNewOne("TempMigrationKey", dbColumn);
+            var references = GetForeignKeyReferences(dbColumn, false);
             DropForeignKeyReferences(references);
-            var isPrimary = IsPrimaryKey(identityColumn);
-            if (isPrimary) DropPrimaryKey(identityColumn);
-            DropColumn(identityColumn);
-            RenameColumn(newColumn, identityColumn.Name);
+            if (dbColumn.IsPrimaryKey) DropPrimaryKey(dbColumn);
+            DropColumn(dbColumn);
+            RenameColumn(newColumn, dbColumn.Name);
             //if (isPrimary) SetPrimaryKey(newColumn);
             //CreateReferences(references, true);
-            IncrementColumnValues(newColumn, maxId);
+            IncrementColumnValues(newColumn, increment);
 
             foreach (var reference in references)
             {
@@ -238,7 +232,7 @@ namespace MergeDatabases
                     IsIdentity: false,
                     DataType: null,
                     IsPrimaryKey: false
-                ), maxId);
+                ), increment);
             }
 
             //DropForeignKeyReferences(references);
@@ -402,7 +396,7 @@ namespace MergeDatabases
                 command.ExecuteNonQuery();
             }
         }
-        private bool IsPrimaryKey(DbColumn column)
+        private bool IsPrimaryKey(string schema, string table, string column)
         {
             var command = GetCommand();
             command.CommandText = $@"SELECT  K.CONSTRAINT_NAME
@@ -412,7 +406,7 @@ FROM    INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS C
                                                          AND C.CONSTRAINT_SCHEMA = K.CONSTRAINT_SCHEMA
                                                          AND C.CONSTRAINT_NAME = K.CONSTRAINT_NAME
 WHERE   C.CONSTRAINT_TYPE = 'PRIMARY KEY'
-        AND K.COLUMN_NAME = '{column.Name}' AND K.TABLE_NAME = '{column.Table}' AND K.TABLE_SCHEMA = '{column.Schema}';";
+        AND K.COLUMN_NAME = '{column}' AND K.TABLE_NAME = '{table}' AND K.TABLE_SCHEMA = '{schema}';";
 
             var value = command.ExecuteScalar();
             return (!string.IsNullOrWhiteSpace(value?.ToString()));
